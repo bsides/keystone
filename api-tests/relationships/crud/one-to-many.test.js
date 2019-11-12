@@ -134,7 +134,7 @@ multiAdapterRunners().map(({ runner, adapterName }) =>
 
     [
       [createListsLR, 'Left -> Right'],
-      [createListsRL, 'Right -> Left'],
+      // [createListsRL, 'Right -> Left'],
     ].forEach(([createLists, order]) => {
       describe(`One-to-many relationships - ${order}`, () => {
         function setupKeystone(adapterName) {
@@ -145,22 +145,23 @@ multiAdapterRunners().map(({ runner, adapterName }) =>
           });
         }
 
-        describe('Read', () => {
-          test(
+        describe.only('Read', () => {
+          test.only(
             '_some',
             runner(setupKeystone, async ({ keystone }) => {
               await createReadData(keystone);
               await Promise.all(
                 [
                   ['A', 6],
-                  ['B', 5],
-                  ['C', 3],
-                  ['D', 0],
+                  // ['B', 5],
+                  // ['C', 3],
+                  // ['D', 0],
                 ].map(async ([name, count]) => {
-                  const { data } = await graphqlRequest({
+                  const { data, errors } = await graphqlRequest({
                     keystone,
                     query: `{ allCompanies(where: { locations_some: { name: "${name}"}}) { id }}`,
                   });
+                  console.log(errors);
                   expect(data.allCompanies.length).toEqual(count);
                 })
               );
@@ -273,7 +274,7 @@ multiAdapterRunners().map(({ runner, adapterName }) =>
             })
           );
 
-          test.failing(
+          test(
             'With nested connect',
             runner(setupKeystone, async ({ keystone }) => {
               const { companies } = await createInitialData(keystone);
@@ -321,7 +322,7 @@ multiAdapterRunners().map(({ runner, adapterName }) =>
             })
           );
 
-          test.failing(
+          test(
             'With nested create',
             runner(setupKeystone, async ({ keystone }) => {
               const locationName = sampleOne(alphanumGenerator);

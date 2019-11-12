@@ -90,7 +90,7 @@ function relationshipPipeline([uid, relationship]) {
   const uniqueField = `${uid}_${field}`;
   const idsName = `${uniqueField}_id${many ? 's' : ''}`;
   const fieldSize = { $size: `$${uniqueField}` };
-  return [
+  const ret = [
     {
       $lookup: {
         from,
@@ -118,6 +118,8 @@ function relationshipPipeline([uid, relationship]) {
       },
     },
   ];
+  console.log(JSON.stringify(ret, null, 4));
+  return ret;
 }
 
 function pipelineBuilder({ relationships, matchTerm, excludeFields, postJoinPipeline }) {

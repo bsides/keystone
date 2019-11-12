@@ -313,12 +313,104 @@ module.exports = class Keystone {
     this._extendedMutations = this._extendedMutations.concat(mutations.map(_parseAccess));
   }
 
+  _consolidateRelationships() {
+    const rels = {};
+    const otherSides = {};
+    this.listsArray.forEach(list => {
+      list.fields
+        .filter(f => f.isRelationship)
+        .forEach(f => {
+          const myRef = `${f.listKey}.${f.path}`;
+          if (otherSides[myRef]) {
+            // I'm already there, go and update rels[otherSides[myRef]] with my info
+            rels[otherSides[myRef]].right = f;
+
+            // Make sure I'm actually referencing the thing on the left
+            const { left } = rels[otherSides[myRef]];
+            if (f.config.ref !== `${left.listKey}.${left.path}`) {
+              throw new Error(
+                `${myRef} refers to ${f.config.ref}. Expected ${left.listKey}.${left.path}`
+              );
+            }
+          } else {
+            // Got us a new relationship!
+            rels[myRef] = { left: f };
+            if (f.refFieldPath) {
+              // Populate otherSides
+              otherSides[f.config.ref] = myRef;
+            }
+          }
+        });
+    });
+    // See if anything failed to link up.
+    const badRel = Object.values(rels).find(({ left, right }) => left.refFieldPath && !right);
+    if (badRel) {
+      const { left } = badRel;
+      throw new Error(
+        `${left.listKey}.${left.path} refers to a non-existant field, ${left.config.ref}`
+      );
+    }
+
+    Object.values(rels).forEach(rel => {
+      const { left, right } = rel;
+      let cardinality;
+      if (left.config.many) {
+        if (right) {
+          if (right.config.many) {
+            cardinality = 'N:N';
+          } else {
+            cardinality = '1:N';
+          }
+        } else {
+          // right not specified, have to assume that it's N:N
+          cardinality = 'N:N';
+        }
+      } else {
+        if (right) {
+          if (right.config.many) {
+            cardinality = 'N:1';
+          } else {
+            cardinality = '1:1';
+          }
+        } else {
+          // right not specified, have to assume that it's N:1
+          cardinality = 'N:1';
+        }
+      }
+      rel.cardinality = cardinality;
+
+      let tableName;
+      let columnName;
+      if (cardinality === 'N:N') {
+        tableName = right
+          ? `${left.listKey}_${left.path}_${right.listKey}_${right.path}`
+          : `${left.listKey}_${left.path}_many`;
+      } else if (cardinality === '1:1') {
+        tableName = left.listKey;
+        columnName = left.path;
+      } else if (cardinality === '1:N') {
+        tableName = right.listKey;
+        columnName = right.path;
+      } else {
+        tableName = left.listKey;
+        columnName = left.path;
+      }
+      rel.tableName = tableName;
+      rel.columnName = columnName;
+    });
+
+    // I guess we win!
+    this.rels = Object.values(rels);
+  }
+
   /**
    * @return Promise<null>
    */
   connect() {
     const { adapters, name } = this;
-    return resolveAllKeys(mapKeys(adapters, adapter => adapter.connect({ name }))).then(() => {
+    return resolveAllKeys(
+      mapKeys(adapters, adapter => adapter.connect({ name, keystone: this }))
+    ).then(() => {
       if (this.eventHandlers.onConnect) {
         return this.eventHandlers.onConnect(this);
       }
@@ -684,6 +776,7 @@ module.exports = class Keystone {
     pinoOptions,
     cors = { origin: true, credentials: true },
   } = {}) {
+    this._consolidateRelationships();
     const middlewares = flattenDeep([
       this.appVersion.addVersionToHttpHeaders &&
         ((req, res, next) => {

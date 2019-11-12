@@ -23,7 +23,9 @@ async function setupServer({
     mongoose: getMongoMemoryServerConfig,
     knex: () => ({
       dropDatabase: true,
-      knexOptions: { connection: process.env.KNEX_URI || 'postgres://localhost/keystone' },
+      knexOptions: {
+        connection: process.env.KNEX_URI || 'postgres://keystone5:k3yst0n3@localhost:5432/keystone',
+      },
     }),
   }[adapterName];
 
@@ -186,7 +188,7 @@ function _keystoneRunner(adapterName, tearDownFunction) {
 
 function multiAdapterRunners(only) {
   return [
-    { runner: _keystoneRunner('mongoose', teardownMongoMemoryServer), adapterName: 'mongoose' },
+    // { runner: _keystoneRunner('mongoose', teardownMongoMemoryServer), adapterName: 'mongoose' },
     { runner: _keystoneRunner('knex', () => {}), adapterName: 'knex' },
   ].filter(a => typeof only === 'undefined' || a.adapterName === only);
 }
